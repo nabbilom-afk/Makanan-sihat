@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Makanan Seimbang 3D - Pengembaraan Dapur Sihat</title>
+    <!-- Tailwind CSS untuk antaramuka pengguna (UI) yang moden dan responsif -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js untuk enjin grafik 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Google Fonts: Fredoka & Plus Jakarta Sans untuk gaya mesra kanak-kanak dan mudah dibaca -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1e293b;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            touch-action: none; /* Menghalang skrol dan zum tidak sengaja pada telefon/tablet */
+        }
+        .font-display {
+            font-family: 'Fredoka', sans-serif;
+        }
+        #canvas-container {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* Animasi butang dan maklum balas */
+        @keyframes pulseGlowGreen {
+            0%, 100% { box-shadow: 0 0 15px rgba(34, 197, 94, 0.5), inset 0 2px 4px rgba(255,255,255,0.4); }
+            50% { box-shadow: 0 0 28px rgba(34, 197, 94, 0.85), inset 0 2px 4px rgba(255,255,255,0.6); }
+        }
+        @keyframes pulseGlowRed {
+            0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.5), inset 0 2px 4px rgba(255,255,255,0.4); }
+            50% { box-shadow: 0 0 28px rgba(239, 68, 68, 0.85), inset 0 2px 4px rgba(255,255,255,0.6); }
+        }
+        .btn-sihat {
+            animation: pulseGlowGreen 2.5s infinite;
+        }
+        .btn-tidak-sihat {
+            animation: pulseGlowRed 2.5s infinite;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 2px solid rgba(255, 255, 255, 0.9);
+        }
+        .glass-dark {
+            background: rgba(15, 23, 42, 0.78);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        /* Gelangsar kelantangan tersuai */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 22px;
+            width: 22px;
+            border-radius: 50%;
+            background: #10b981;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            border: 2px solid white;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 999px;
+        }
+        @keyframes floatPop {
+            0% { transform: translate(-50%, 10px) scale(0.8); opacity: 0; }
+            20% { transform: translate(-50%, 0px) scale(1.05); opacity: 1; }
+            85% { transform: translate(-50%, -8px) scale(1); opacity: 1; }
+            100% { transform: translate(-50%, -20px) scale(0.95); opacity: 0; }
+        }
+        .feedback-toast {
+            animation: floatPop 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Kanvas 3D Utama -->
+    <div id="canvas-container"></div>
+
+    <!-- Lapisan HUD (Heads-Up Display) Semasa Bermain -->
+    <div id="hud-layer" class="fixed inset-0 z-10 pointer-events-none flex flex-col justify-between p-3 sm:p-5 hidden">
+        
+        <!-- Bahagian Atas HUD: Nyawa, Skor, Kombo & Butang Tetapan -->
+        <div class="flex items-start justify-between gap-2 w-full max-w-6xl mx-auto">
+            <!-- Panel Skor & Nyawa -->
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3 pointer-events-auto">
+                <!-- Nyawa (Hati) -->
+                <div class="glass-panel rounded-2xl px-3 py-2 sm:px-4 sm:py-2.5 shadow-lg flex items-center gap-1.5" title="Nyawa Anda">
+                    <div id="hearts-container" class="flex items-center gap-1 text-xl sm:text-2xl">
+                        <span>❤️</span><span>❤️</span><span>❤️</span>
+                    </div>
+                </div>
+
+                <!-- Skor -->
+                <div class="glass-panel rounded-2xl px-3.5 py-2 sm:px-5 sm:py-2.5 shadow-lg flex items-center gap-2">
+                    <span class="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Skor</span>
+                    <span id="score-display" class="font-display text-xl sm:text-2xl font-bold text-slate-800">0</span>
+                </div>
+
+                <!-- Penunjuk Kombo -->
+                <div id="combo-badge" class="hidden bg-amber-400 text-amber-950 font-display font-bold px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl shadow-lg border-2 border-white text-sm sm:text-base transform transition-transform">
+                    🔥 <span id="combo-count">2</span>x Kombo!
+                </div>
+            </div>
+
+            <!-- Penunjuk Mod Kawalan Aktif & Butang Tetapan -->
+            <div class="flex items-center gap-2 pointer-events-auto">
+                <div id="active-control-pill" class="hidden md:flex glass-dark text-white text-xs font-semibold px-3 py-2 rounded-xl items-center gap-1.5">
+                    <span id="control-pill-icon">📱</span>
+                    <span id="control-pill-text">Skrin Sentuh</span>
+                </div>
+
+                <!-- Butang Tetapan (Settings) -->
+                <button id="btn-open-settings" aria-label="Tetapan" class="glass-panel hover:bg-white active:scale-95 transition-all rounded-2xl p-2.5 sm:p-3 shadow-lg text-slate-700 flex items-center gap-2 cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 sm:w-7 sm:h-7 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span class="hidden sm:inline font-bold text-sm text-slate-800">Tetapan</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Zon Maklum Balas Pendidikan & Nama Makanan Semasa -->
+        <div class="relative flex flex-col items-center justify-center my-auto pointer-events-none">
+            <!-- Mesej Maklum Balas Terapung -->
+            <div id="feedback-container" class="fixed top-20 sm:top-24 left-1/2 -translate-x-1/2 z-30 w-11/12 max-w-md text-center pointer-events-none"></div>
+
+            <!-- Kad Nama Makanan Aktif di Bahagian Bawah Tengah -->
+            <div id="current-food-banner" class="fixed bottom-28 sm:bottom-32 left-1/2 -translate-x-1/2 glass-panel px-5 py-2 rounded-full shadow-xl border-2 border-white flex items-center gap-2.5 transition-all duration-200">
+                <span id="food-emoji" class="text-2xl sm:text-3xl">🍎</span>
+                <div class="text-left">
+                    <p class="text-[10px] uppercase tracking-wider font-extrabold text-slate-400 leading-none">Kelaskan Makanan</p>
+                    <p id="food-name-label" class="font-display text-lg sm:text-xl font-bold text-slate-800 leading-tight">EPAL</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bahagian Bawah HUD: Butang Kawalan Skrin Sentuh & Panduan Papan Kekunci -->
+        <div class="w-full max-w-5xl mx-auto pb-1 sm:pb-3">
+            <!-- Kawalan Skrin Sentuh (Touch Screen Controller) -->
+            <div id="touch-controls-bar" class="flex items-center justify-between gap-3 sm:gap-6 pointer-events-auto">
+                <button id="btn-sort-healthy" class="btn-sihat flex-1 max-w-[230px] bg-gradient-to-b from-emerald-400 to-green-600 hover:from-emerald-300 hover:to-green-500 active:scale-95 transition-all text-white rounded-3xl py-3.5 px-4 sm:py-4 sm:px-6 border-2 border-emerald-200 flex items-center justify-center gap-2 sm:gap-3 cursor-pointer">
+                    <span class="text-2xl sm:text-3xl font-bold">⬅</span>
+                    <div class="text-left">
+                        <span class="block font-display text-base sm:text-xl font-bold leading-tight">SIHAT</span>
+                        <span class="block text-[10px] sm:text-xs text-emerald-100 font-medium">Makanan Berkhasiat</span>
+                    </div>
+                </button>
+
+                <!-- Petunjuk Leret (Swipe) untuk Telefon/Tablet -->
+                <div class="hidden sm:flex flex-col items-center text-white/90 text-xs font-semibold bg-slate-900/50 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15">
+                    <span>👆 Tekan Butang, Leret Kiri/Kanan</span>
+                    <span class="text-white/70 text-[11px]">atau Ketik Tong 3D Terus</span>
+                </div>
+
+                <button id="btn-sort-unhealthy" class="btn-tidak-sihat flex-1 max-w-[230px] bg-gradient-to-b from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 active:scale-95 transition-all text-white rounded-3xl py-3.5 px-4 sm:py-4 sm:px-6 border-2 border-rose-200 flex items-center justify-center gap-2 sm:gap-3 cursor-pointer">
+                    <div class="text-right">
+                        <span class="block font-display text-base sm:text-xl font-bold leading-tight">TIDAK SIHAT</span>
+                        <span class="block text-[10px] sm:text-xs text-rose-100 font-medium">Kurangkan Pengambilan</span>
+                    </div>
+                    <span class="text-2xl sm:text-3xl font-bold">➡</span>
+                </button>
+            </div>
+
+            <!-- Panduan Papan Kekunci (Keyboard Controller Hint) -->
+            <div id="keyboard-controls-bar" class="hidden flex items-center justify-center gap-4 pointer-events-auto">
+                <div class="glass-dark text-white px-5 py-3 rounded-2xl flex flex-wrap items-center justify-center gap-4 sm:gap-8 shadow-xl">
+                    <button id="kbd-btn-left" class="flex items-center gap-2 hover:text-emerald-300 transition cursor-pointer">
+                        <kbd class="bg-slate-700 border border-slate-500 px-2.5 py-1 rounded-lg font-mono font-bold text-sm shadow">⬅</kbd>
+                        <span class="text-xs text-slate-400">atau</span>
+                        <kbd class="bg-slate-700 border border-slate-500 px-2.5 py-1 rounded-lg font-mono font-bold text-sm shadow">A</kbd>
+                        <span class="font-display font-bold text-emerald-400 ml-1">MAKANAN SIHAT</span>
+                    </button>
+                    <div class="h-6 w-px bg-slate-600 hidden sm:block"></div>
+                    <button id="kbd-btn-right" class="flex items-center gap-2 hover:text-rose-300 transition cursor-pointer">
+                        <span class="font-display font-bold text-rose-400 mr-1">TIDAK SIHAT</span>
+                        <kbd class="bg-slate-700 border border-slate-500 px-2.5 py-1 rounded-lg font-mono font-bold text-sm shadow">D</kbd>
+                        <span class="text-xs text-slate-400">atau</span>
+                        <kbd class="bg-slate-700 border border-slate-500 px-2.5 py-1 rounded-lg font-mono font-bold text-sm shadow">➡</kbd>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skrin Utama / Menu Mula (Start Screen Overlay) -->
+    <div id="start-screen" class="fixed inset-0 z-20 flex items-center justify-center p-4 bg-slate-900/45 backdrop-blur-sm">
+        <div class="glass-panel w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-2xl text-center relative overflow-hidden">
+            <!-- Lencana Atas -->
+            <div class="inline-flex items-center gap-2 bg-emerald-100 text-emerald-800 font-bold text-xs sm:text-sm px-3.5 py-1.5 rounded-full mb-3 border border-emerald-200">
+                <span>🥗</span> Permainan Pendidikan 3D FPV
+            </div>
+
+            <h1 class="font-display text-3xl sm:text-4xl font-bold text-slate-800 mb-2 tracking-tight">
+                Makanan Seimbang 3D
+            </h1>
+            <p class="text-slate-600 text-sm sm:text-base mb-5 leading-relaxed">
+                Bantu dapur sekolah mengasingkan makanan mengikut khasiatnya sebelum sampai ke hujung meja!
+            </p>
+
+            <!-- Kad Panduan Kategori Makanan -->
+            <div class="grid grid-cols-2 gap-3 mb-6 text-left">
+                <div class="bg-emerald-50/90 border-2 border-emerald-200 rounded-2xl p-3.5">
+                    <div class="flex items-center gap-1.5 font-display font-bold text-emerald-700 text-sm sm:text-base mb-1.5">
+                        <span>✅</span> Makanan Sihat
+                    </div>
+                    <ul class="text-xs sm:text-sm text-emerald-900 space-y-1 font-medium">
+                        <li>🍎 Epal</li>
+                        <li>🍐 Pear</li>
+                        <li>🥬 Sawi</li>
+                    </ul>
+                </div>
+
+                <div class="bg-rose-50/90 border-2 border-rose-200 rounded-2xl p-3.5">
+                    <div class="flex items-center gap-1.5 font-display font-bold text-rose-700 text-sm sm:text-base mb-1.5">
+                        <span>⚠️</span> Tidak Sihat
+                    </div>
+                    <ul class="text-xs sm:text-sm text-rose-900 space-y-1 font-medium">
+                        <li>🍩 Donut</li>
+                        <li>🍕 Pizza</li>
+                        <li>🍰 Kek</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Butang Mula & Tetapan -->
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button id="btn-start-game" class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-95 transition-all text-white font-display font-bold text-lg sm:text-xl py-3.5 px-6 rounded-2xl shadow-lg shadow-emerald-500/30 cursor-pointer">
+                    ▶ Mula Bermain
+                </button>
+                <button id="btn-start-settings" class="bg-slate-100 hover:bg-slate-200 active:scale-95 transition-all text-slate-700 font-bold text-base py-3.5 px-5 rounded-2xl border border-slate-300 flex items-center justify-center gap-2 cursor-pointer">
+                    <span>⚙️</span> Tetapan
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Tetapan (Settings Modal) -->
+    <div id="settings-modal" class="fixed inset-0 z-40 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+        <div class="glass-panel w-full max-w-md rounded-3xl p-6 sm:p-7 shadow-2xl relative max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-4 mb-5 border-b border-slate-200">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-2xl">⚙️</span>
+                    <h2 class="font-display text-2xl font-bold text-slate-800">Tetapan Permainan</h2>
+                </div>
+                <button id="btn-close-settings" class="w-9 h-9 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-700 font-bold flex items-center justify-center transition cursor-pointer">
+                    ✕
+                </button>
+            </div>
+
+            <div class="space-y-5">
+                <!-- 1. Lagu / Muzik Latar & Kesan Bunyi -->
+                <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200/80">
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-sm sm:text-base">🎵 Lagu & Kesan Bunyi</h3>
+                            <p class="text-xs text-slate-500">Muzik latar ceria dan bunyi interaksi</p>
+                        </div>
+                        <button id="toggle-audio" class="w-14 h-8 rounded-full bg-emerald-500 p-1 transition-colors duration-200 flex items-center cursor-pointer" aria-pressed="true">
+                            <span id="toggle-audio-knob" class="w-6 h-6 rounded-full bg-white shadow transform translate-x-6 transition-transform duration-200"></span>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm">🔉</span>
+                        <input id="volume-slider" type="range" min="0" max="100" value="65" class="flex-1">
+                        <span id="volume-label" class="text-xs font-bold text-slate-600 w-9 text-right">65%</span>
+                    </div>
+                </div>
+
+                <!-- 2. Resolusi Grafik (Resolution) -->
+                <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200/80">
+                    <h3 class="font-bold text-slate-800 text-sm sm:text-base mb-1">🖥️ Resolusi Grafik 3D</h3>
+                    <p class="text-xs text-slate-500 mb-3">Laraskan kualiti visual mengikut prestasi peranti anda</p>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button data-res="low" class="res-btn py-2 px-3 rounded-xl text-xs sm:text-sm font-bold border-2 border-slate-200 bg-white text-slate-600 hover:border-emerald-400 transition cursor-pointer">
+                            Rendah
+                        </button>
+                        <button data-res="medium" class="res-btn py-2 px-3 rounded-xl text-xs sm:text-sm font-bold border-2 border-emerald-500 bg-emerald-50 text-emerald-700 transition cursor-pointer">
+                            Sederhana
+                        </button>
+                        <button data-res="high" class="res-btn py-2 px-3 rounded-xl text-xs sm:text-sm font-bold border-2 border-slate-200 bg-white text-slate-600 hover:border-emerald-400 transition cursor-pointer">
+                            Tinggi
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. Jenis Kawalan (Controller: Touch Screen / Keyboard) -->
+                <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200/80">
+                    <h3 class="font-bold text-slate-800 text-sm sm:text-base mb-1">🎮 Mod Kawalan (Controller)</h3>
+                    <p class="text-xs text-slate-500 mb-3">Pilih kawalan telefon/tablet atau papan kekunci</p>
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <button id="ctrl-touch" class="py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold border-2 border-emerald-500 bg-emerald-50 text-emerald-700 flex items-center justify-center gap-1.5 transition cursor-pointer">
+                            <span>📱</span> Skrin Sentuh
+                        </button>
+                        <button id="ctrl-keyboard" class="py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold border-2 border-slate-200 bg-white text-slate-600 flex items-center justify-center gap-1.5 transition cursor-pointer">
+                            <span>⌨️</span> Papan Kekunci
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 4. Skrin Penuh (Full Screen) -->
+                <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 flex items-center justify-between gap-3">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm sm:text-base">⛶ Paparan Skrin Penuh</h3>
+                        <p id="fullscreen-status-text" class="text-xs text-slate-500">Mod tetingkap biasa</p>
+                    </div>
+                    <button id="btn-toggle-fullscreen" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition cursor-pointer">
+                        Skrin Penuh
+                    </button>
+                </div>
+            </div>
+
+            <button id="btn-save-settings" class="w-full mt-6 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-display font-bold text-lg py-3 rounded-2xl shadow-md transition cursor-pointer">
+                Simpan & Teruskan
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal Tamat Permainan (Game Over Modal) -->
+    <div id="gameover-modal" class="fixed inset-0 z-30 hidden items-center justify-center p-4 bg-slate-900/65 backdrop-blur-md">
+        <div class="glass-panel w-full max-w-md rounded-3xl p-6 sm:p-8 shadow-2xl text-center">
+            <div class="text-5xl mb-2">🏆</div>
+            <h2 class="font-display text-3xl font-bold text-slate-800 mb-1">Tamat Permainan!</h2>
+            <p id="gameover-subtitle" class="text-slate-600 text-sm mb-5">Tahniah atas usaha anda mengamalkan pemakanan sihat!</p>
+
+            <!-- Statistik Akhir -->
+            <div class="grid grid-cols-3 gap-2.5 bg-slate-100/90 p-4 rounded-2xl border border-slate-200 mb-6">
+                <div>
+                    <p class="text-[11px] font-bold text-slate-400 uppercase">Skor Akhir</p>
+                    <p id="final-score" class="font-display text-2xl font-bold text-emerald-600">0</p>
+                </div>
+                <div class="border-x border-slate-200">
+                    <p class="text-[11px] font-bold text-slate-400 uppercase">Ketepatan</p>
+                    <p id="final-accuracy" class="font-display text-2xl font-bold text-blue-600">0%</p>
+                </div>
+                <div>
+                    <p class="text-[11px] font-bold text-slate-400 uppercase">Kombo Terbaik</p>
+                    <p id="final-best-combo" class="font-display text-2xl font-bold text-amber-500">0</p>
+                </div>
+            </div>
+
+            <button id="btn-replay" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-95 transition-all text-white font-display font-bold text-xl py-3.5 px-6 rounded-2xl shadow-lg shadow-emerald-500/30 cursor-pointer">
+                🔄 Main Semula
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * ============================================================================
+         * ENJIN AUDIO WEB (WEB AUDIO API) - MUZIK LATAR & KESAN BUNYI SINTETIK
+         * ============================================================================
+         * Menggunakan Web Audio API supaya permainan berfungsi tanpa pautan fail MP3 luar
+         * dan berjalan lancar pada telefon pintar, tablet, serta pelayar desktop.
+         */
+        class SoundManager {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+                this.volume = 0.65;
+                this.bgmInterval = null;
+                this.noteIndex = 0;
+                // Melodi ceria dalam nada C Major pentatonik
+                this.melody = [
+                    523.25, 659.25, 783.99, 659.25, // C5, E5, G5, E5
+                    587.33, 698.46, 880.00, 698.46, // D5, F5, A5, F5
+                    523.25, 659.25, 783.99, 1046.50, // C5, E5, G5, C6
+                    783.99, 659.25, 587.33, 523.25  // G5, E5, D5, C5
+                ];
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            startBGM() {
+                this.init();
+                if (this.bgmInterval) clearInterval(this.bgmInterval);
+                this.bgmInterval = setInterval(() => {
+                    if (!this.enabled || !gameState.isPlaying || gameState.isPaused) return;
+                    const freq = this.melody[this.noteIndex % this.melody.length];
+                    this.playTone(freq, 'sine', 0.22, 0.08 * this.volume);
+                    this.noteIndex++;
+                }, 380);
+            }
+
+            stopBGM() {
+                if (this.bgmInterval) {
+                    clearInterval(this.bgmInterval);
+                    this.bgmInterval = null;
+                }
+            }
+
+            playTone(freq, type, duration, gainVal) {
+                if (!this.enabled || !this.ctx) return;
+                try {
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, now);
+
+                    gain.gain.setValueAtTime(0.001, now);
+                    gain.gain.exponentialRampToValueAtTime(Math.max(0.001, gainVal), now + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + duration + 0.02);
+                } catch (e) {
+                    // Abaikan ralat jika konteks audio belum dibuka oleh interaksi pengguna
+                }
+            }
+
+            playCorrect() {
+                this.init();
+                if (!this.enabled) return;
+                const v = 0.25 * this.volume;
+                this.playTone(587.33, 'triangle', 0.14, v); // D5
+                setTimeout(() => this.playTone(880.00, 'triangle', 0.25, v), 80); // A5
+            }
+
+            playWrong() {
+                this.init();
+                if (!this.enabled) return;
+                const v = 0.28 * this.volume;
+                this.playTone(180, 'sawtooth', 0.18, v);
+                setTimeout(() => this.playTone(135, 'sawtooth', 0.28, v), 110);
+            }
+
+            playClick() {
+                this.init();
+                if (!this.enabled) return;
+                this.playTone(700, 'sine', 0.07, 0.15 * this.volume);
+            }
+        }
+
+        const soundFX = new SoundManager();
+
+        /**
+         * ============================================================================
+         * DATA MAKANAN & KEADAAN PERMAINAN (GAME STATE)
+         * ============================================================================
+         */
+        const FOOD_CATALOG = [
+            {
+                id: 'epal',
+                name: 'EPAL',
+                emoji: '🍎',
+                isHealthy: true,
+                factCorrect: 'Betul! Epal kaya dengan vitamin dan serat.',
+                factWrong: 'Epal ialah makanan sihat! Kaya dengan vitamin.'
+            },
+            {
+                id: 'pear',
+                name: 'PEAR',
+                emoji: '🍐',
+                isHealthy: true,
+                factCorrect: 'Syabas! Buah pear sangat baik untuk penghadaman.',
+                factWrong: 'Pear ialah buah berkhasiat yang tinggi serat!'
+            },
+            {
+                id: 'sawi',
+                name: 'SAWI',
+                emoji: '🥬',
+                isHealthy: true,
+                factCorrect: 'Tepat sekali! Sayur sawi menguatkan badan.',
+                factWrong: 'Sawi ialah sayur-sayuran sihat yang kaya zat besi!'
+            },
+            {
+                id: 'donut',
+                name: 'DONUT',
+                emoji: '🍩',
+                isHealthy: false,
+                factCorrect: 'Bagus! Donut tinggi kandungan gula dan lemak.',
+                factWrong: 'Donut tidak sihat kerana tinggi gula berlebihan!'
+            },
+            {
+                id: 'pizza',
+                name: 'PIZZA',
+                emoji: '🍕',
+                isHealthy: false,
+                factCorrect: 'Betul! Pizza mempunyai lemak tepu dan garam tinggi.',
+                factWrong: 'Pizza ialah makanan segera yang tinggi lemak!'
+            },
+            {
+                id: 'kek',
+                name: 'KEK',
+                emoji: '🍰',
+                isHealthy: false,
+                factCorrect: 'Pandai! Kek manis perlu diambil secara terhad.',
+                factWrong: 'Kek mengandungi gula yang sangat tinggi!'
+            }
+        ];
+
+        const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
+
+        const gameState = {
+            isPlaying: false,
+            isPaused: false,
+            score: 0,
+            lives: 3,
+            combo: 0,
+            bestCombo: 0,
+            totalAttempts: 0,
+            correctAttempts: 0,
+            speed: 2.3,
+            resolution: 'medium', // 'low' | 'medium' | 'high'
+            controlMode: isMobileOrTablet ? 'touch' : 'keyboard', // 'touch' | 'keyboard'
+            activeFood: null,
+            flyingFoods: [],
+            particles: [],
+            shakeIntensity: 0,
+            cameraYawOffset: 0,
+            cameraPitchOffset: 0
+        };
+
+        /**
+         * ============================================================================
+         * PEMBINAAN DUNIA 3D (THREE.JS SCENE, KAMERA FPV, DAPUR & MODEL MAKANAN)
+         * ============================================================================
+         */
+        let scene, camera, renderer, raycaster, pointer;
+        let conveyorStripes = [];
+        let leftBinGroup, rightBinGroup, leftPortalRing, rightPortalRing;
+        let clock = new THREE.Clock();
+
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+
+            // 1. Scene & Atmosfera Dapur Cerah
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xdbeafe);
+            scene.fog = new THREE.FogExp2(0xdbeafe, 0.025);
+
+            // 2. Kamera First-Person View (FPV) - Pemain berdiri di hadapan tali sawat dapur
+            camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 2.35, 4.4);
+            camera.lookAt(0, 1.15, -1.5);
+
+            // 3. Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            applyResolutionSetting(gameState.resolution);
+
+            // 4. Pencahayaan Dapur Cerah & Mesra
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0xf1f5f9, 0.9);
+            hemiLight.position.set(0, 15, 0);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xfffbeb, 0.95);
+            dirLight.position.set(5, 10, 6);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 1;
+            dirLight.shadow.camera.far = 25;
+            scene.add(dirLight);
+
+            // Cahaya aksen hijau (kiri) dan merah (kanan) pada zon tong
+            const greenSpot = new THREE.PointLight(0x22c55e, 1.2, 6);
+            greenSpot.position.set(-2.3, 1.8, 1.4);
+            scene.add(greenSpot);
+
+            const redSpot = new THREE.PointLight(0xef4444, 1.2, 6);
+            redSpot.position.set(2.3, 1.8, 1.4);
+            scene.add(redSpot);
+
+            // 5. Bina Persekitaran Dapur / Kafeteria
+            buildKitchenEnvironment();
+
+            // 6. Bina Dua Tong Pengelasan 3D (Kiri: Sihat, Kanan: Tidak Sihat)
+            buildSortingBins();
+
+            // 7. Raycaster untuk klik / ketik terus pada tong 3D
+            raycaster = new THREE.Raycaster();
+            pointer = new THREE.Vector2();
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function buildKitchenEnvironment() {
+            // Lantai Jubin Dapur
+            const floorGeo = new THREE.PlaneGeometry(30, 30);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.7 });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // Grid jubin halus
+            const grid = new THREE.GridHelper(24, 24, 0xcbd5e1, 0xe2e8f0);
+            grid.position.y = 0.01;
+            scene.add(grid);
+
+            // Dinding Belakang Dapur
+            const backWall = new THREE.Mesh(
+                new THREE.BoxGeometry(22, 9, 0.5),
+                new THREE.MeshStandardMaterial({ color: 0xe0f2fe, roughness: 0.8 })
+            );
+            backWall.position.set(0, 4.5, -10);
+            scene.add(backWall);
+
+            // Tingkap Cerah di Dinding Belakang
+            const windowFrame = new THREE.Mesh(
+                new THREE.BoxGeometry(5.5, 2.8, 0.6),
+                new THREE.MeshStandardMaterial({ color: 0xffffff })
+            );
+            windowFrame.position.set(0, 4.5, -9.9);
+            scene.add(windowFrame);
+
+            const windowGlass = new THREE.Mesh(
+                new THREE.BoxGeometry(5.0, 2.3, 0.65),
+                new THREE.MeshBasicMaterial({ color: 0xbae6fd })
+            );
+            windowGlass.position.set(0, 4.5, -9.88);
+            scene.add(windowGlass);
+
+            // Kabinet Dapur Hiasan di Kiri & Kanan
+            const cabinetMat = new THREE.MeshStandardMaterial({ color: 0xfef3c7, roughness: 0.6 });
+            const counterTopMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.4 });
+
+            [-5.2, 5.2].forEach(xPos => {
+                const cab = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.8, 12), cabinetMat);
+                cab.position.set(xPos, 0.9, -2);
+                cab.receiveShadow = true;
+                scene.add(cab);
+
+                const top = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.15, 12.2), counterTopMat);
+                top.position.set(xPos, 1.85, -2);
+                scene.add(top);
+            });
+
+            // Meja Tali Sawat (Conveyor Belt) Tengah
+            const beltBase = new THREE.Mesh(
+                new THREE.BoxGeometry(2.1, 0.95, 13),
+                new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5, metalness: 0.2 })
+            );
+            beltBase.position.set(0, 0.475, -3.2);
+            beltBase.receiveShadow = true;
+            scene.add(beltBase);
+
+            // Permukaan Tali Sawat
+            const beltSurface = new THREE.Mesh(
+                new THREE.BoxGeometry(1.75, 0.08, 13.1),
+                new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 })
+            );
+            beltSurface.position.set(0, 0.98, -3.2);
+            beltSurface.receiveShadow = true;
+            scene.add(beltSurface);
+
+            // Jalur Rel Sisi Tali Sawat
+            const railMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.5, roughness: 0.3 });
+            [-0.95, 0.95].forEach(rx => {
+                const rail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 13.2), railMat);
+                rail.position.set(rx, 1.02, -3.2);
+                scene.add(rail);
+            });
+
+            // Jalur Garisan Bergerak di atas Tali Sawat
+            const stripeGeo = new THREE.BoxGeometry(1.4, 0.02, 0.18);
+            const stripeMat = new THREE.MeshStandardMaterial({ color: 0x475569 });
+            for (let z = -9.5; z <= 3.0; z += 1.0) {
+                const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+                stripe.position.set(0, 1.025, z);
+                scene.add(stripe);
+                conveyorStripes.push(stripe);
+            }
+
+            // Gerbang Keluar Makanan di Hujung Belakang Tali Sawat
+            const arch = new THREE.Mesh(
+                new THREE.BoxGeometry(2.4, 2.2, 0.8),
+                new THREE.MeshStandardMaterial({ color: 0x475569 })
+            );
+            arch.position.set(0, 1.8, -9.2);
+            scene.add(arch);
+        }
+
+        // Mencipta tekstur papan tanda teks 3D menggunakan Canvas 2D
+        function createSignTexture(title, subtitle, bgColor, borderColor) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            // Latar bulat
+            ctx.fillStyle = bgColor;
+            ctx.beginPath();
+            ctx.roundRect(12, 12, 488, 232, 36);
+            ctx.fill();
+
+            ctx.lineWidth = 12;
+            ctx.strokeStyle = borderColor;
+            ctx.stroke();
+
+            // Teks Utama
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 54px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(title, 256, 98);
+
+            // Subteks
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.font = 'bold 34px sans-serif';
+            ctx.fillText(subtitle, 256, 168);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            return tex;
+        }
+
+        function buildSortingBins() {
+            // --- TONG KIRI: MAKANAN SIHAT ---
+            leftBinGroup = new THREE.Group();
+            leftBinGroup.position.set(-2.15, 0.75, 1.35);
+            leftBinGroup.rotation.y = 0.35;
+
+            const greenBinBody = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.95, 0.75, 1.35, 24),
+                new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.35 })
+            );
+            greenBinBody.castShadow = true;
+            greenBinBody.userData = { binType: 'healthy' };
+            leftBinGroup.add(greenBinBody);
+
+            leftPortalRing = new THREE.Mesh(
+                new THREE.TorusGeometry(0.96, 0.09, 16, 32),
+                new THREE.MeshBasicMaterial({ color: 0x4ade80 })
+            );
+            leftPortalRing.rotation.x = Math.PI / 2;
+            leftPortalRing.position.y = 0.68;
+            leftBinGroup.add(leftPortalRing);
+
+            const leftInnerGlow = new THREE.Mesh(
+                new THREE.CircleGeometry(0.9, 24),
+                new THREE.MeshBasicMaterial({ color: 0x86efac, transparent: true, opacity: 0.65 })
+            );
+            leftInnerGlow.rotation.x = -Math.PI / 2;
+            leftInnerGlow.position.y = 0.66;
+            leftInnerGlow.userData = { binType: 'healthy' };
+            leftBinGroup.add(leftInnerGlow);
+
+            // Papan Tanda 3D Tong Sihat
+            const leftSignTex = createSignTexture('MAKANAN SIHAT', '✔ BERKHASIAT', '#15803d', '#86efac');
+            const leftSign = new THREE.Mesh(
+                new THREE.PlaneGeometry(1.85, 0.92),
+                new THREE.MeshBasicMaterial({ map: leftSignTex, transparent: true })
+            );
+            leftSign.position.set(0, 1.55, 0);
+            leftSign.userData = { binType: 'healthy' };
+            leftBinGroup.add(leftSign);
+
+            scene.add(leftBinGroup);
+
+            // --- TONG KANAN: MAKANAN TIDAK SIHAT ---
+            rightBinGroup = new THREE.Group();
+            rightBinGroup.position.set(2.15, 0.75, 1.35);
+            rightBinGroup.rotation.y = -0.35;
+
+            const redBinBody = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.95, 0.75, 1.35, 24),
+                new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.35 })
+            );
+            redBinBody.castShadow = true;
+            redBinBody.userData = { binType: 'unhealthy' };
+            rightBinGroup.add(redBinBody);
+
+            rightPortalRing = new THREE.Mesh(
+                new THREE.TorusGeometry(0.96, 0.09, 16, 32),
+                new THREE.MeshBasicMaterial({ color: 0xf87171 })
+            );
+            rightPortalRing.rotation.x = Math.PI / 2;
+            rightPortalRing.position.y = 0.68;
+            rightBinGroup.add(rightPortalRing);
+
+            const rightInnerGlow = new THREE.Mesh(
+                new THREE.CircleGeometry(0.9, 24),
+                new THREE.MeshBasicMaterial({ color: 0xfca5a5, transparent: true, opacity: 0.65 })
+            );
+            rightInnerGlow.rotation.x = -Math.PI / 2;
+            rightInnerGlow.position.y = 0.66;
+            rightInnerGlow.userData = { binType: 'unhealthy' };
+            rightBinGroup.add(rightInnerGlow);
+
+            // Papan Tanda 3D Tong Tidak Sihat
+            const rightSignTex = createSignTexture('TIDAK SIHAT', '✖ KURANGKAN', '#b91c1c', '#fca5a5');
+            const rightSign = new THREE.Mesh(
+                new THREE.PlaneGeometry(1.85, 0.92),
+                new THREE.MeshBasicMaterial({ map: rightSignTex, transparent: true })
+            );
+            rightSign.position.set(0, 1.55, 0);
+            rightSign.userData = { binType: 'unhealthy' };
+            rightBinGroup.add(rightSign);
+
+            scene.add(rightBinGroup);
+        }
+
+        /**
+         * ============================================================================
+         * PEMBINA MODEL MAKANAN 3D PROSEDURAL (EPAL, PEAR, SAWI, DONUT, PIZZA, KEK)
+         * ============================================================================
+         */
+        function createFoodMesh(foodId) {
+            const group = new THREE.Group();
+
+            // Tapak pinggan putih kecil di bawah setiap makanan supaya kelihatan kemas
+            const plate = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.58, 0.45, 0.06, 24),
+                new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 })
+            );
+            plate.position.y = 0.03;
+            plate.receiveShadow = true;
+            group.add(plate);
+
+            if (foodId === 'epal') {
+                // Epal Merah
+                const appleMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.25, metalness: 0.05 });
+                const body = new THREE.Mesh(new THREE.SphereGeometry(0.38, 24, 24), appleMat);
+                body.scale.set(1.05, 0.95, 1.05);
+                body.position.y = 0.41;
+                body.castShadow = true;
+                group.add(body);
+
+                // Tangkai coklat
+                const stem = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.03, 0.04, 0.18, 8),
+                    new THREE.MeshStandardMaterial({ color: 0x78350f })
+                );
+                stem.position.set(0, 0.80, 0);
+                stem.rotation.z = 0.15;
+                group.add(stem);
+
+                // Daun hijau
+                const leaf = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.12, 12, 12),
+                    new THREE.MeshStandardMaterial({ color: 0x22c55e })
+                );
+                leaf.scale.set(1.4, 0.3, 0.7);
+                leaf.position.set(0.12, 0.82, 0);
+                leaf.rotation.z = 0.35;
+                group.add(leaf);
+
+            } else if (foodId === 'pear') {
+                // Buah Pear Hijau Kekuningan
+                const pearMat = new THREE.MeshStandardMaterial({ color: 0xa3e635, roughness: 0.3 });
+                const bottomBulb = new THREE.Mesh(new THREE.SphereGeometry(0.35, 24, 24), pearMat);
+                bottomBulb.position.y = 0.38;
+                bottomBulb.castShadow = true;
+                group.add(bottomBulb);
+
+                const topNeck = new THREE.Mesh(new THREE.SphereGeometry(0.23, 20, 20), pearMat);
+                topNeck.scale.set(0.95, 1.35, 0.95);
+                topNeck.position.y = 0.68;
+                topNeck.castShadow = true;
+                group.add(topNeck);
+
+                const stem = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.025, 0.035, 0.18, 8),
+                    new THREE.MeshStandardMaterial({ color: 0x713f12 })
+                );
+                stem.position.y = 0.98;
+                stem.rotation.z = -0.2;
+                group.add(stem);
+
+            } else if (foodId === 'sawi') {
+                // Sayur Sawi (Batang hijau muda + daun hijau pekat berombak)
+                const stalkMat = new THREE.MeshStandardMaterial({ color: 0xbef264, roughness: 0.4 });
+                const leafMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.5 });
+
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i / 5) * Math.PI * 2;
+                    const stalkGroup = new THREE.Group();
+                    stalkGroup.rotation.y = angle;
+                    stalkGroup.rotation.z = 0.22;
+
+                    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.45, 10), stalkMat);
+                    stalk.position.set(0.1, 0.28, 0);
+                    stalkGroup.add(stalk);
+
+                    const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 14), leafMat);
+                    leaf.scale.set(0.8, 1.45, 0.25);
+                    leaf.position.set(0.14, 0.62, 0);
+                    leaf.castShadow = true;
+                    stalkGroup.add(leaf);
+
+                    group.add(stalkGroup);
+                }
+
+            } else if (foodId === 'donut') {
+                // Donut dengan Aising Merah Jambu & Taburan Warna-warni
+                const dough = new THREE.Mesh(
+                    new THREE.TorusGeometry(0.32, 0.14, 16, 32),
+                    new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.55 })
+                );
+                dough.rotation.x = Math.PI / 2;
+                dough.position.y = 0.22;
+                dough.castShadow = true;
+                group.add(dough);
+
+                const icing = new THREE.Mesh(
+                    new THREE.TorusGeometry(0.32, 0.145, 16, 32, Math.PI * 2),
+                    new THREE.MeshStandardMaterial({ color: 0xf43f5e, roughness: 0.25 })
+                );
+                icing.rotation.x = Math.PI / 2;
+                icing.position.y = 0.245;
+                group.add(icing);
+
+                // Taburan gula (sprinkles)
+                const sprinkleColors = [0xfef08a, 0x38bdf8, 0xffffff, 0xa855f7];
+                for (let i = 0; i < 14; i++) {
+                    const a = (i / 14) * Math.PI * 2;
+                    const sp = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.06, 0.02, 0.02),
+                        new THREE.MeshBasicMaterial({ color: sprinkleColors[i % sprinkleColors.length] })
+                    );
+                    sp.position.set(Math.cos(a) * 0.32, 0.39, Math.sin(a) * 0.32);
+                    sp.rotation.y = a + 0.5;
+                    group.add(sp);
+                }
+
+            } else if (foodId === 'pizza') {
+                // Potongan Pizza Segi Tiga (Wedge)
+                const cheese = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.55, 0.55, 0.08, 3),
+                    new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.4 })
+                );
+                cheese.position.set(0, 0.14, 0.05);
+                cheese.castShadow = true;
+                group.add(cheese);
+
+                // Kerak roti di belakang
+                const crust = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.07, 0.07, 0.92, 12),
+                    new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.6 })
+                );
+                crust.rotation.z = Math.PI / 2;
+                crust.position.set(0, 0.16, -0.24);
+                group.add(crust);
+
+                // Pepperoni merah
+                const pepMat = new THREE.MeshStandardMaterial({ color: 0xdc2626 });
+                [[0, 0.08], [-0.14, -0.08], [0.14, -0.08]].forEach(([px, pz]) => {
+                    const pep = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.02, 14), pepMat);
+                    pep.position.set(px, 0.19, pz);
+                    group.add(pep);
+                });
+
+            } else if (foodId === 'kek') {
+                // Potongan Kek Berlapis dengan Krim & Ceri
+                const sponge = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.48, 0.48, 0.38, 3),
+                    new THREE.MeshStandardMaterial({ color: 0xfde047, roughness: 0.5 })
+                );
+                sponge.position.y = 0.26;
+                sponge.castShadow = true;
+                group.add(sponge);
+
+                const frostingTop = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.49, 0.49, 0.09, 3),
+                    new THREE.MeshStandardMaterial({ color: 0xfb7185, roughness: 0.3 })
+                );
+                frostingTop.position.y = 0.48;
+                group.add(frostingTop);
+
+                // Ceri merah di atas kek
+                const cherry = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.09, 14, 14),
+                    new THREE.MeshStandardMaterial({ color: 0xbe123c, roughness: 0.2 })
+                );
+                cherry.position.set(0, 0.58, -0.05);
+                group.add(cherry);
+            }
+
+            // Gegelung cahaya penunjuk makanan aktif di bawah pinggan
+            const ring = new THREE.Mesh(
+                new THREE.RingGeometry(0.55, 0.66, 32),
+                new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide })
+            );
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.y = 0.02;
+            group.add(ring);
+
+            return group;
+        }
+
+        /**
+         * ============================================================================
+         * LOGIK ALIRAN PERMAINAN (SPAWN, PENGELASAN, ZARAH & KOMBO)
+         * ============================================================================
+         */
+        function spawnNextFood() {
+            // Pilih makanan secara rawak (elak ulangan berturut-turut jika boleh)
+            let candidate;
+            do {
+                candidate = FOOD_CATALOG[Math.floor(Math.random() * FOOD_CATALOG.length)];
+            } while (gameState.activeFood && candidate.id === gameState.activeFood.data.id);
+
+            const mesh = createFoodMesh(candidate.id);
+            mesh.position.set(0, 1.03, -7.8);
+            scene.add(mesh);
+
+            gameState.activeFood = {
+                data: candidate,
+                mesh: mesh
+            };
+
+            // Kemas kini label UI makanan aktif
+            document.getElementById('food-emoji').textContent = candidate.emoji;
+            document.getElementById('food-name-label').textContent = candidate.name;
+        }
+
+        function sortCurrentFood(chosenHealthy) {
+            if (!gameState.isPlaying || gameState.isPaused || !gameState.activeFood) return;
+
+            const current = gameState.activeFood;
+            gameState.activeFood = null;
+            gameState.totalAttempts++;
+
+            const isCorrect = (chosenHealthy === current.data.isHealthy);
+            const targetBin = chosenHealthy ? leftBinGroup : rightBinGroup;
+
+            // Animasi makanan terbang melengkung masuk ke dalam tong pilihan
+            gameState.flyingFoods.push({
+                mesh: current.mesh,
+                startPos: current.mesh.position.clone(),
+                endPos: new THREE.Vector3(targetBin.position.x, targetBin.position.y + 0.5, targetBin.position.z),
+                progress: 0,
+                isCorrect: isCorrect
+            });
+
+            if (isCorrect) {
+                soundFX.playCorrect();
+                gameState.correctAttempts++;
+                gameState.combo++;
+                if (gameState.combo > gameState.bestCombo) {
+                    gameState.bestCombo = gameState.combo;
+                }
+                const bonus = Math.min(gameState.combo - 1, 5) * 2;
+                gameState.score += (10 + bonus);
+
+                // Tingkatkan kelajuan secara beransur-ansur mengikut skor
+                gameState.speed = Math.min(5.2, 2.3 + (gameState.score * 0.008));
+
+                spawnBurstParticles(targetBin.position, 0x4ade80);
+                showFeedbackBanner(current.data.factCorrect, true);
+            } else {
+                soundFX.playWrong();
+                gameState.combo = 0;
+                gameState.lives--;
+                gameState.shakeIntensity = 0.25;
+
+                spawnBurstParticles(targetBin.position, 0xf87171);
+                showFeedbackBanner(current.data.factWrong, false);
+            }
+
+            updateHUD();
+
+            if (gameState.lives <= 0) {
+                setTimeout(endGame, 650);
+            } else {
+                spawnNextFood();
+            }
+        }
+
+        function spawnBurstParticles(origin, hexColor) {
+            const geo = new THREE.SphereGeometry(0.08, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: hexColor });
+
+            for (let i = 0; i < 16; i++) {
+                const p = new THREE.Mesh(geo, mat);
+                p.position.set(origin.x, origin.y + 0.8, origin.z);
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1.5 + Math.random() * 3.0;
+                scene.add(p);
+                gameState.particles.push({
+                    mesh: p,
+                    vel: new THREE.Vector3(Math.cos(angle) * speed, 2.5 + Math.random() * 2.5, Math.sin(angle) * speed),
+                    life: 1.0
+                });
+            }
+        }
+
+        function showFeedbackBanner(message, isSuccess) {
+            const container = document.getElementById('feedback-container');
+            const badge = document.createElement('div');
+            badge.className = `feedback-toast inline-block px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm shadow-xl border-2 ${
+                isSuccess
+                    ? 'bg-emerald-600 text-white border-emerald-200'
+                    : 'bg-rose-600 text-white border-rose-200'
+            }`;
+            badge.textContent = `${isSuccess ? '✅' : '❌'} ${message}`;
+            container.innerHTML = '';
+            container.appendChild(badge);
+        }
+
+        function updateHUD() {
+            document.getElementById('score-display').textContent = gameState.score;
+
+            // Papar ikon hati nyawa
+            const heartsEl = document.getElementById('hearts-container');
+            let heartsHTML = '';
+            for (let i = 0; i < 3; i++) {
+                heartsHTML += i < gameState.lives ? '<span>❤️</span>' : '<span class="opacity-30 grayscale">🖤</span>';
+            }
+            heartsEl.innerHTML = heartsHTML;
+
+            // Papar lencana kombo jika >= 2
+            const comboBadge = document.getElementById('combo-badge');
+            if (gameState.combo >= 2) {
+                comboBadge.classList.remove('hidden');
+                document.getElementById('combo-count').textContent = gameState.combo;
+            } else {
+                comboBadge.classList.add('hidden');
+            }
+        }
+
+        function startGame() {
+            soundFX.playClick();
+            soundFX.startBGM();
+
+            // Bersihkan makanan lama jika ada
+            if (gameState.activeFood) {
+                scene.remove(gameState.activeFood.mesh);
+                gameState.activeFood = null;
+            }
+            gameState.flyingFoods.forEach(f => scene.remove(f.mesh));
+            gameState.flyingFoods = [];
+
+            // Reset statistik
+            gameState.isPlaying = true;
+            gameState.isPaused = false;
+            gameState.score = 0;
+            gameState.lives = 3;
+            gameState.combo = 0;
+            gameState.bestCombo = 0;
+            gameState.totalAttempts = 0;
+            gameState.correctAttempts = 0;
+            gameState.speed = 2.3;
+
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('gameover-modal').classList.add('hidden');
+            document.getElementById('gameover-modal').classList.remove('flex');
+            document.getElementById('hud-layer').classList.remove('hidden');
+
+            updateHUD();
+            applyControlModeUI();
+            spawnNextFood();
+        }
+
+        function endGame() {
+            gameState.isPlaying = false;
+            soundFX.stopBGM();
+
+            const accuracy = gameState.totalAttempts > 0
+                ? Math.round((gameState.correctAttempts / gameState.totalAttempts) * 100)
+                : 0;
+
+            document.getElementById('final-score').textContent = gameState.score;
+            document.getElementById('final-accuracy').textContent = `${accuracy}%`;
+            document.getElementById('final-best-combo').textContent = `${gameState.bestCombo}x`;
+
+            document.getElementById('hud-layer').classList.add('hidden');
+            const modal = document.getElementById('gameover-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        /**
+         * ============================================================================
+         * KAWALAN SENTUH (TOUCH SCREEN), LERET (SWIPE), RAYCAST & PAPAN KEKUNCI
+         * ============================================================================
+         */
+        function setupControls() {
+            // Butang UI Kawalan Sentuh
+            document.getElementById('btn-sort-healthy').addEventListener('click', () => sortCurrentFood(true));
+            document.getElementById('btn-sort-unhealthy').addEventListener('click', () => sortCurrentFood(false));
+
+            // Butang UI Panduan Papan Kekunci (juga boleh diklik tetikus)
+            document.getElementById('kbd-btn-left').addEventListener('click', () => sortCurrentFood(true));
+            document.getElementById('kbd-btn-right').addEventListener('click', () => sortCurrentFood(false));
+
+            // Kawalan Papan Kekunci (ArrowLeft/A = Sihat, ArrowRight/D = Tidak Sihat)
+            window.addEventListener('keydown', (e) => {
+                if (!gameState.isPlaying || gameState.isPaused) return;
+                if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                    sortCurrentFood(true);
+                } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                    sortCurrentFood(false);
+                }
+            });
+
+            // Gerakan Leret (Swipe) & Pandangan FPV pada Skrin Sentuh / Tetikus
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let touchStartTime = 0;
+
+            const canvasEl = renderer.domElement;
+
+            canvasEl.addEventListener('pointerdown', (e) => {
+                touchStartX = e.clientX;
+                touchStartY = e.clientY;
+                touchStartTime = Date.now();
+
+                // Semak jika pemain mengetik/klik terus pada Tong 3D (Raycasting)
+                if (gameState.isPlaying && !gameState.isPaused) {
+                    pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+                    pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                    raycaster.setFromCamera(pointer, camera);
+
+                    const targets = [...leftBinGroup.children, ...rightBinGroup.children];
+                    const intersects = raycaster.intersectObjects(targets, false);
+                    if (intersects.length > 0) {
+                        const binType = intersects[0].object.userData.binType;
+                        if (binType === 'healthy') {
+                            sortCurrentFood(true);
+                            return;
+                        } else if (binType === 'unhealthy') {
+                            sortCurrentFood(false);
+                            return;
+                        }
+                    }
+                }
+            });
+
+            canvasEl.addEventListener('pointermove', (e) => {
+                // Kesan pandangan FPV lembut mengikut pergerakan jari/tetikus
+                const normX = (e.clientX / window.innerWidth) * 2 - 1;
+                const normY = (e.clientY / window.innerHeight) * 2 - 1;
+                gameState.cameraYawOffset = -normX * 0.14;
+                gameState.cameraPitchOffset = -normY * 0.08;
+            });
+
+            canvasEl.addEventListener('pointerup', (e) => {
+                if (!gameState.isPlaying || gameState.isPaused) return;
+                const dx = e.clientX - touchStartX;
+                const dy = e.clientY - touchStartY;
+                const dt = Date.now() - touchStartTime;
+
+                // Kesan leretan pantas kiri atau kanan pada telefon/tablet
+                if (dt < 500 && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
+                    if (dx < 0) {
+                        sortCurrentFood(true);  // Leret ke Kiri -> Sihat
+                    } else {
+                        sortCurrentFood(false); // Leret ke Kanan -> Tidak Sihat
+                    }
+                }
+            });
+        }
+
+        /**
+         * ============================================================================
+         * PENGURUSAN TETAPAN (SETTINGS: LAGU, RESOLUSI, CONTROLLER, FULLSCREEN)
+         * ============================================================================
+         */
+        function applyResolutionSetting(level) {
+            gameState.resolution = level;
+            const dpr = window.devicePixelRatio || 1;
+            if (level === 'low') {
+                renderer.setPixelRatio(0.65);
+                renderer.shadowMap.enabled = false;
+            } else if (level === 'medium') {
+                renderer.setPixelRatio(Math.min(dpr, 1.15));
+                renderer.shadowMap.enabled = true;
+            } else {
+                renderer.setPixelRatio(Math.min(dpr, 2.0));
+                renderer.shadowMap.enabled = true;
+            }
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            // Kemas kini gaya butang aktif dalam modal tetapan
+            document.querySelectorAll('.res-btn').forEach(btn => {
+                if (btn.dataset.res === level) {
+                    btn.className = 'res-btn py-2 px-3 rounded-xl text-xs sm:text-sm font-bold border-2 border-emerald-500 bg-emerald-50 text-emerald-700 transition cursor-pointer';
+                } else {
+                    btn.className = 'res-btn py-2 px-3 rounded-xl text-xs sm:text-sm font-bold border-2 border-slate-200 bg-white text-slate-600 hover:border-emerald-400 transition cursor-pointer';
+                }
+            });
+        }
+
+        function applyControlModeUI() {
+            const touchBar = document.getElementById('touch-controls-bar');
+            const kbdBar = document.getElementById('keyboard-controls-bar');
+            const btnTouch = document.getElementById('ctrl-touch');
+            const btnKbd = document.getElementById('ctrl-keyboard');
+            const pillIcon = document.getElementById('control-pill-icon');
+            const pillText = document.getElementById('control-pill-text');
+
+            if (gameState.controlMode === 'touch') {
+                touchBar.classList.remove('hidden');
+                kbdBar.classList.add('hidden');
+                btnTouch.className = 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold border-2 border-emerald-500 bg-emerald-50 text-emerald-700 flex items-center justify-center gap-1.5 transition cursor-pointer';
+                btnKbd.className = 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold border-2 border-slate-200 bg-white text-slate-600 flex items-center justify-center gap-1.5 transition cursor-pointer';
+                pillIcon.textContent = '📱';
+                pillText.textContent = 'Skrin Sentuh';
+            } else {
+                touchBar.classList.add('hidden');
+                kbdBar.classList.remove('hidden');
+                btnKbd.className = 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold border-2 border-emerald-500 bg-emerald-50 text-emerald-700 flex items-center justify-center gap-1.5 transition cursor-pointer';
+                btnTouch.className = 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold border-2 border-slate-200 bg-white text-slate-600 flex items-center justify-center gap-1.5 transition cursor-pointer';
+                pillIcon.textContent = '⌨️';
+                pillText.textContent = 'Papan Kekunci';
+            }
+        }
+
+        function toggleFullScreen() {
+            soundFX.playClick();
+            const statusText = document.getElementById('fullscreen-status-text');
+            const btnFs = document.getElementById('btn-toggle-fullscreen');
+
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                const docEl = document.documentElement;
+                const req = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.msRequestFullscreen;
+                if (req) {
+                    req.call(docEl).then(() => {
+                        statusText.textContent = 'Mod skrin penuh aktif';
+                        btnFs.textContent = 'Keluar Skrin Penuh';
+                    }).catch(() => {
+                        statusText.textContent = 'Skrin penuh disekat oleh pelayar ini';
+                    });
+                } else {
+                    statusText.textContent = 'Peranti ini tidak menyokong skrin penuh';
+                }
+            } else {
+                const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+                if (exit) {
+                    exit.call(document).then(() => {
+                        statusText.textContent = 'Mod tetingkap biasa';
+                        btnFs.textContent = 'Skrin Penuh';
+                    }).catch(() => {});
+                }
+            }
+        }
+
+        function setupSettingsUI() {
+            const modal = document.getElementById('settings-modal');
+
+            const openSettings = () => {
+                soundFX.playClick();
+                gameState.isPaused = true;
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            };
+
+            const closeSettings = () => {
+                soundFX.playClick();
+                gameState.isPaused = false;
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            };
+
+            document.getElementById('btn-open-settings').addEventListener('click', openSettings);
+            document.getElementById('btn-start-settings').addEventListener('click', openSettings);
+            document.getElementById('btn-close-settings').addEventListener('click', closeSettings);
+            document.getElementById('btn-save-settings').addEventListener('click', closeSettings);
+
+            // Togol Lagu / Audio
+            const toggleAudioBtn = document.getElementById('toggle-audio');
+            const toggleAudioKnob = document.getElementById('toggle-audio-knob');
+            toggleAudioBtn.addEventListener('click', () => {
+                soundFX.enabled = !soundFX.enabled;
+                if (soundFX.enabled) {
+                    toggleAudioBtn.classList.replace('bg-slate-300', 'bg-emerald-500');
+                    toggleAudioKnob.classList.add('translate-x-6');
+                    soundFX.playClick();
+                } else {
+                    toggleAudioBtn.classList.replace('bg-emerald-500', 'bg-slate-300');
+                    toggleAudioKnob.classList.remove('translate-x-6');
+                }
+            });
+
+            // Gelangsar Kelantangan (Volume Slider)
+            const volSlider = document.getElementById('volume-slider');
+            const volLabel = document.getElementById('volume-label');
+            volSlider.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value, 10);
+                soundFX.volume = val / 100;
+                volLabel.textContent = `${val}%`;
+            });
+
+            // Pemilih Resolusi
+            document.querySelectorAll('.res-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    soundFX.playClick();
+                    applyResolutionSetting(btn.dataset.res);
+                });
+            });
+
+            // Pemilih Mod Kawalan
+            document.getElementById('ctrl-touch').addEventListener('click', () => {
+                soundFX.playClick();
+                gameState.controlMode = 'touch';
+                applyControlModeUI();
+            });
+            document.getElementById('ctrl-keyboard').addEventListener('click', () => {
+                soundFX.playClick();
+                gameState.controlMode = 'keyboard';
+                applyControlModeUI();
+            });
+
+            // Butang Skrin Penuh
+            document.getElementById('btn-toggle-fullscreen').addEventListener('click', toggleFullScreen);
+
+            // Butang Mula & Main Semula
+            document.getElementById('btn-start-game').addEventListener('click', startGame);
+            document.getElementById('btn-replay').addEventListener('click', startGame);
+        }
+
+        function onWindowResize() {
+            if (!camera || !renderer) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        /**
+         * ============================================================================
+         * GELUNG ANIMASI UTAMA (RENDER LOOP)
+         * ============================================================================
+         */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.1);
+            const elapsed = clock.getElapsedTime();
+
+            // Animasi gegelung cahaya tong pengelasan
+            if (leftPortalRing && rightPortalRing) {
+                const pulse = 1 + Math.sin(elapsed * 4) * 0.04;
+                leftPortalRing.scale.set(pulse, pulse, 1);
+                rightPortalRing.scale.set(pulse, pulse, 1);
+            }
+
+            if (gameState.isPlaying && !gameState.isPaused) {
+                // Gerakkan garisan tali sawat
+                conveyorStripes.forEach(stripe => {
+                    stripe.position.z += gameState.speed * dt;
+                    if (stripe.position.z > 3.2) {
+                        stripe.position.z = -9.5;
+                    }
+                });
+
+                // Gerakkan makanan aktif ke arah pemain
+                if (gameState.activeFood) {
+                    const foodObj = gameState.activeFood;
+                    foodObj.mesh.position.z += gameState.speed * dt;
+                    foodObj.mesh.rotation.y += 1.4 * dt;
+
+                    // Jika makanan melepasi hujung tali sawat tanpa dikelaskan
+                    if (foodObj.mesh.position.z >= 2.65) {
+                        soundFX.playWrong();
+                        scene.remove(foodObj.mesh);
+                        gameState.activeFood = null;
+                        gameState.totalAttempts++;
+                        gameState.combo = 0;
+                        gameState.lives--;
+                        gameState.shakeIntensity = 0.25;
+                        showFeedbackBanner('Terlepas! Sila kelaskan makanan dengan pantas.', false);
+                        updateHUD();
+
+                        if (gameState.lives <= 0) {
+                            setTimeout(endGame, 600);
+                        } else {
+                            spawnNextFood();
+                        }
+                    }
+                }
+            }
+
+            // Animasi makanan terbang melengkung ke dalam tong
+            for (let i = gameState.flyingFoods.length - 1; i >= 0; i--) {
+                const item = gameState.flyingFoods[i];
+                item.progress += dt * 4.2;
+                const t = Math.min(item.progress, 1);
+
+                item.mesh.position.lerpVectors(item.startPos, item.endPos, t);
+                item.mesh.position.y += Math.sin(t * Math.PI) * 1.1; // Lengkungan parabola
+                item.mesh.scale.setScalar(1 - t * 0.65);
+                item.mesh.rotation.y += 8 * dt;
+
+                if (t >= 1) {
+                    scene.remove(item.mesh);
+                    gameState.flyingFoods.splice(i, 1);
+                }
+            }
+
+            // Animasi zarah letupan maklum balas
+            for (let i = gameState.particles.length - 1; i >= 0; i--) {
+                const p = gameState.particles[i];
+                p.life -= dt * 1.8;
+                p.vel.y -= 9.8 * dt;
+                p.mesh.position.addScaledVector(p.vel, dt);
+                p.mesh.scale.setScalar(Math.max(0.01, p.life));
+
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    gameState.particles.splice(i, 1);
+                }
+            }
+
+            // Kamera First-Person View (FPV) + Gegaran apabila salah
+            let shakeX = 0, shakeY = 0;
+            if (gameState.shakeIntensity > 0) {
+                shakeX = (Math.random() - 0.5) * gameState.shakeIntensity;
+                shakeY = (Math.random() - 0.5) * gameState.shakeIntensity;
+                gameState.shakeIntensity = Math.max(0, gameState.shakeIntensity - dt * 1.2);
+            }
+
+            camera.position.set(shakeX, 2.35 + shakeY, 4.4);
+            camera.lookAt(
+                gameState.cameraYawOffset * 4,
+                1.15 + gameState.cameraPitchOffset * 2,
+                -1.5
+            );
+
+            renderer.render(scene, camera);
+        }
+
+        // Mulakan aplikasi setelah halaman dimuatkan sepenuhnya
+        window.onload = function () {
+            init3D();
+            setupControls();
+            setupSettingsUI();
+            applyControlModeUI();
+            animate();
+        };
+    </script>
+</body>
+</html>
